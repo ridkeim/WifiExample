@@ -13,7 +13,7 @@ import android.os.Bundle
 import android.util.Log
 import android.widget.Button
 import android.widget.TextView
-import androidx.annotation.RequiresApi
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 
@@ -22,7 +22,22 @@ class MainActivity : AppCompatActivity() {
         applicationContext.getSystemService(WIFI_SERVICE) as WifiManager
     }
     private lateinit var infoTextView: TextView
-    private val wifiStateReceiver = WifiStateReceiver()
+    private val wifiStateReceiver = object : BroadcastReceiver(){
+        @SuppressLint("SetTextI18n")
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val extraWifiState = intent!!.getIntExtra(
+                    WifiManager.EXTRA_WIFI_STATE,
+                    WifiManager.WIFI_STATE_UNKNOWN)
+            when (extraWifiState) {
+                WifiManager.WIFI_STATE_DISABLED -> infoTextView.text = "WIFI недоступен"
+                WifiManager.WIFI_STATE_DISABLING -> infoTextView.text = "WIFI отключается"
+                WifiManager.WIFI_STATE_ENABLED -> infoTextView.text = "WIFI доступен"
+                WifiManager.WIFI_STATE_ENABLING -> infoTextView.text = "WIFI включается"
+                WifiManager.WIFI_STATE_UNKNOWN -> infoTextView.text = "WIFI: неизвестное состояние"
+            }
+            infoTextView.append("\n${getDeviceCurrentIPAddress()}")
+        }
+    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -55,7 +70,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startScanActivity(){
-        startActivity(Intent(this,ScanActivity::class.java))
+        if(!wifiManager.isWifiEnabled){
+            AlertDialog.Builder(this)
+                    .setTitle("Wifi выключен!")
+                    .setMessage("Для работы сканера включите Wifi")
+                    .setPositiveButton("Ок"){ dialog, _ ->
+                        dialog.cancel()
+                    }
+                    .create()
+                    .show()
+        }else{
+            startActivity(Intent(this,ScanActivity::class.java))
+        }
     }
 
     override fun onResume() {
@@ -68,55 +94,35 @@ class MainActivity : AppCompatActivity() {
         unregisterReceiver(wifiStateReceiver)
     }
 
-    inner class WifiStateReceiver : BroadcastReceiver(){
-        @SuppressLint("SetTextI18n")
-        override fun onReceive(context: Context?, intent: Intent?) {
-            val extraWifiState = intent!!.getIntExtra(
-                    WifiManager.EXTRA_WIFI_STATE,
-                    WifiManager.WIFI_STATE_UNKNOWN)
-            when (extraWifiState) {
-                WifiManager.WIFI_STATE_DISABLED -> infoTextView.text = "WIFI недоступен"
-                WifiManager.WIFI_STATE_DISABLING -> infoTextView.text = "WIFI отключается"
-                WifiManager.WIFI_STATE_ENABLED -> infoTextView.text = "WIFI доступен"
-                WifiManager.WIFI_STATE_ENABLING -> infoTextView.text = "WIFI включается"
-                WifiManager.WIFI_STATE_UNKNOWN -> infoTextView.text = "WIFI: неизвестное состояние"
-            }
-            infoTextView.append("\n${getDeviceCurrentIPAddress()}")
-        }
-    }
-
-
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
         grantResults: IntArray
     ) {
         when (requestCode) {
-        PERMISSION_REQUEST_CODE -> {
-            // If request is cancelled, the result arrays are empty.
-            if ((grantResults.isNotEmpty() &&
-                        grantResults[0] == PackageManager.PERMISSION_GRANTED)) {
-                // Permission is granted. Continue the action or workflow
-                // in your app.
-                startScanActivity()
-            } else {
-                Log.d(TAG,"")
-
-                // Explain to the user that the feature is unavailable because
-                // the features requires a permission that the user has denied.
-                // At the same time, respect the user's decision. Don't link to
-                // system settings in an effort to convince the user to change
-                // their decision.
+            PERMISSION_REQUEST_CODE -> {
+                // If request is cancelled, the result arrays are empty.
+                if ((grantResults.isNotEmpty() &&
+                            grantResults[0] == PackageManager.PERMISSION_GRANTED)) {
+                    // Permission is granted. Continue the action or workflow
+                    // in your app.
+                    startScanActivity()
+                } else {
+                    Log.d(TAG,"")
+                    // Explain to the user that the feature is unavailable because
+                    // the features requires a permission that the user has denied.
+                    // At the same time, respect the user's decision. Don't link to
+                    // system settings in an effort to convince the user to change
+                    // their decision.
+                }
+                return
             }
-            return
+            // Add other 'when' lines to check for other
+            // permissions this app might request.
+            else -> {
+                // Ignore all other requests.
+            }
         }
-        // Add other 'when' lines to check for other
-        // permissions this app might request.
-        else -> {
-            // Ignore all other requests.
-        }
-    }
-
     }
 
     companion object {

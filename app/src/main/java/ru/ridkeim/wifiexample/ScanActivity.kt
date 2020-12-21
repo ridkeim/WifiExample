@@ -1,47 +1,76 @@
 package ru.ridkeim.wifiexample
 
-import android.annotation.SuppressLint
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.net.wifi.ScanResult
 import android.net.wifi.WifiManager
 import android.os.Bundle
-import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 
+
 class ScanActivity : AppCompatActivity() {
-    private lateinit var textView: TextView
+    private lateinit var radarView : RadarView
+    private val maxSignalLevel = 100
     private val wifiManager by lazy{
         applicationContext.getSystemService(WIFI_SERVICE) as WifiManager
     }
+    private val channelsFrequency: List<Int> = listOf(
+        0,
+        2412,
+        2417,
+        2422,
+        2427,
+        2432,
+        2437,
+        2442,
+        2447,
+        2452,
+        2457,
+        2462,
+        2467,
+        2472,
+        2484
+    )
 
+    private val accessPoints = mutableListOf<AccessPoint>()
+
+    fun getChannelFromFrequency(frequency: Int): Int {
+        return channelsFrequency.indexOf(frequency)
+    }
+
+    fun getSecurity(capabilities: String): Int {
+        return if (capabilities.contains("[WPA")) 2 else if (capabilities.contains("[WEP")) 1 else 0
+    }
+
+    fun getWPS(capabilities: String): Boolean {
+        return capabilities.contains("[WPS]")
+    }
     private val scanReceiver = object : BroadcastReceiver(){
-        @SuppressLint("SetTextI18n")
         override fun onReceive(context: Context?, intent: Intent?) {
-            val scanResults = wifiManager.scanResults
             val success = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                intent?.getBooleanExtra(WifiManager.EXTRA_RESULTS_UPDATED,false) ?: false
+                intent?.getBooleanExtra(WifiManager.EXTRA_RESULTS_UPDATED, false) ?: false
             } else {
                 true
             }
             if(success){
-                var bestSignal: ScanResult? = null
-                textView.text = "Scan result: ${scanResults.size} points"
-
-                for (scanResult in scanResults){
-                    if(bestSignal == null || WifiManager.compareSignalLevel(bestSignal.level, scanResult.level) < 0){
-                        bestSignal = scanResult
-                    }
-                    textView.append("\nSSID: ${scanResult.SSID}")
-                    textView.append("\nLevel: ${scanResult.level} dBm")
-                    textView.append("\nFrequency: ${scanResult.frequency} MHz")
-                    textView.append("\nCapabilities: ${scanResult.capabilities}")
+                val scanResults = wifiManager.scanResults
+                accessPoints.clear()
+                for (scanResult in scanResults) {
+                    @Suppress("DEPRECATION") val accessPoint = AccessPoint(
+                        scanResult.SSID,
+                        scanResult.BSSID,
+                        getChannelFromFrequency(scanResult.frequency),
+                        WifiManager.calculateSignalLevel(scanResult.level, maxSignalLevel),
+                        getSecurity(scanResult.capabilities),
+                        getWPS(scanResult.capabilities)
+                    )
+                    accessPoints.add(accessPoint)
                 }
-                textView.append("\nBest signal: ${bestSignal?.SSID ?: ""}")
+                radarView.setData(accessPoints)
             } else {
-                textView.text = "Something goes wrong"
+                Toast.makeText(context,"Something goes wrong",Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -49,7 +78,7 @@ class ScanActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_scan)
-        textView = findViewById(R.id.textView)
+        radarView = findViewById(R.id.radarView)
     }
 
     override fun onPause() {
